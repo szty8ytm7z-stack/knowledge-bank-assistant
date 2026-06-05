@@ -1,0 +1,53 @@
+{
+  "documents": [
+    {
+      "name": "Q2 Product Launch Plan.md",
+      "type": "Markdown",
+      "synced": "Just now",
+      "content": "The Q2 launch focuses on three priorities: ship the collaborative workspace by May 18, improve activation from 41% to 55%, and prepare the enterprise security package. The launch campaign begins May 6 with a customer webinar and partner preview. Product owns workspace delivery, Growth owns activation experiments, and Security owns the SOC 2 readiness package. The team will measure weekly active teams, time to first shared project, and enterprise demo requests."
+    },
+    {
+      "name": "Remote Work Policy.txt",
+      "type": "Text",
+      "synced": "2 min ago",
+      "content": "Northstar is a remote-first company. Employees may work from anywhere in their hiring country. Core collaboration hours are 10:00 to 14:00 in each team's primary timezone, Monday through Thursday. Team members can expense up to $800 for a home office setup and $75 per month for internet. In-person team gatherings happen twice per year and travel is covered by the company."
+    },
+    {
+      "name": "Enterprise Pricing 2026.csv",
+      "type": "CSV",
+      "synced": "4 min ago",
+      "content": "Enterprise plans begin at $36 per user per month with a 50-seat minimum and annual agreement. Volume pricing is available above 200 seats. Enterprise includes SSO, SCIM provisioning, audit logs, custom data retention, priority support, and a named customer success manager. Customers can add the advanced security package for $8 per user per month."
+    },
+    {
+      "name": "Customer Interviews — Onboarding.md",
+      "type": "Markdown",
+      "synced": "8 min ago",
+      "content": "Customers consistently praised the template gallery but found inviting teammates too easy to miss. Five of eight interviewees wanted sample projects populated with realistic data. New admins were unsure which permissions to choose. Recommended improvements: make team invite a clear checklist step, add role explanations, and provide a guided first project with sample content."
+    },
+    {
+      "name": "Brand Voice Guidelines.md",
+      "type": "Markdown",
+      "synced": "12 min ago",
+      "content": "Our voice is clear, warm, capable, and candid. Prefer short sentences and everyday words. Explain the benefit before the feature. Avoid hype, jargon, and claims we cannot prove. We should sound like a knowledgeable teammate, not a corporate announcement."
+    },
+    {
+      "name": "Security & Compliance Overview.txt",
+      "type": "Text",
+      "synced": "18 min ago",
+      "content": "Northstar encrypts data in transit with TLS 1.3 and at rest with AES-256. Production access requires SSO and hardware security keys. Audit logs are retained for 365 days on Enterprise plans. SOC 2 Type II renewal is scheduled for July. Customer data is backed up daily with point-in-time recovery."
+    },
+    {
+      "name": "2026 Company Goals.md",
+      "type": "Markdown",
+      "synced": "21 min ago",
+      "content": "The company goals for 2026 are to reach $12M ARR, maintain net revenue retention above 112%, and become the easiest collaborative workspace to adopt. The operating plan prioritizes enterprise readiness, faster onboarding, and international expansion into the UK and Australia."
+    },
+    {
+      "name": "Support Escalation Guide.txt",
+      "type": "Text",
+      "synced": "30 min ago",
+      "content": "Severity 1 issues include full service outage, confirmed data loss, or a critical security incident. Page the on-call engineer immediately and update the customer every 30 minutes. Severity 2 issues receive a response within two hours. All escalations require an incident channel and a written retrospective."
+    }
+  ],
+  "connectedFolders": []
+}

@@ -1,0 +1,12 @@
+{
+  "name": "knowledge-bank-assistant",
+  "version": "1.0.0",
+  "description": "Shared Knowledge Bank Assistant chatbot website",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

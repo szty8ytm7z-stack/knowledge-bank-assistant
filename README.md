@@ -25,11 +25,13 @@ Then visit `http://localhost:4173`.
 
 ## Deploy
 
-This is a static site and can be deployed to Render as a Static Site.
+This version includes a small Node server so every user shares the same Knowledge Library.
+
+Deploy it to Render as a Web Service.
 
 - Build command: leave blank
-- Publish directory: `.`
+- Start command: `npm start`
 
 ## Prototype Notes
 
-The current app stores data in browser local storage. Production use would need a backend for real authentication, shared storage, secure document processing, Google OAuth, and server-side AI analysis.
+The server stores the shared Knowledge Library in `data/library.json`. On Render, attach a persistent disk or set `DATA_FILE` to a persistent path if you want the library to survive service restarts and redeploys. Production use would also need real authentication, secure document processing, Google OAuth, and server-side AI analysis.

@@ -41,6 +41,7 @@ let latestUploadedDocument = documents.find(doc => doc.isUpload) || null;
 let libraryUnlocked = false;
 let pendingDeleteIndex = null;
 let recentQuestions = loadRecentQuestions();
+let sharedLibraryAvailable = false;
 
 const driveFolderDocuments = {
   "Product & Strategy": [
@@ -66,10 +67,38 @@ function loadLibraryState() {
 }
 
 function saveLibraryState() {
+  const state = { documents, connectedFolders };
   try {
-    localStorage.setItem("atlas-library-state", JSON.stringify({ documents, connectedFolders }));
+    localStorage.setItem("atlas-library-state", JSON.stringify(state));
   } catch {
     showToast("Library changes could not be saved in this browser");
+  }
+  fetch("/api/library", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(state)
+  }).then(response => {
+    sharedLibraryAvailable = response.ok;
+  }).catch(() => {
+    sharedLibraryAvailable = false;
+  });
+}
+
+async function loadSharedLibraryState() {
+  try {
+    const response = await fetch("/api/library");
+    if (!response.ok) throw new Error("Shared library unavailable");
+    const state = await response.json();
+    if (!Array.isArray(state.documents) || !Array.isArray(state.connectedFolders)) return;
+    documents = state.documents;
+    connectedFolders = state.connectedFolders;
+    latestUploadedDocument = documents.find(doc => doc.isUpload) || documents[0] || null;
+    sharedLibraryAvailable = true;
+    localStorage.setItem("atlas-library-state", JSON.stringify(state));
+    renderFiles($("#librarySearch").value);
+    renderConnections();
+  } catch {
+    sharedLibraryAvailable = false;
   }
 }
 
@@ -612,3 +641,4 @@ document.addEventListener("keydown", event => {
 renderFiles();
 renderConnections();
 renderHistory();
+loadSharedLibraryState();
