@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Ask questions across your team's raw knowledge and get cited answers.">
+  <title>Atlas — Ask your knowledge</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </div>
+        <span>atlas</span>
+      </div>
+
+      <button class="new-thread" id="newThreadBtn">
+        <span class="icon">＋</span>
+        New thread
+        <kbd>⌘ K</kbd>
+      </button>
+
+      <nav class="main-nav" aria-label="Main navigation">
+        <button class="nav-item active" data-view="chat">
+          <span class="nav-icon">✦</span> Ask Atlas
+        </button>
+        <button class="nav-item" data-view="library">
+          <span class="nav-icon">▱</span> Knowledge library
+          <span class="lock-indicator" id="lockIndicator">Locked</span>
+          <span class="count" id="navDocCount">8</span>
+        </button>
+      </nav>
+
+      <div class="history-section">
+        <div class="section-label">
+          <span>Recent</span>
+          <button id="clearHistoryBtn" class="clear-history" title="Delete all recent questions">Clear all</button>
+        </div>
+        <div class="history-search"><span>⌕</span><input id="historySearch" placeholder="Search recent questions"></div>
+        <div id="historyList"></div>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="storage-card">
+          <div class="storage-top">
+            <span>Knowledge indexed</span>
+            <strong id="indexedCount">8 docs</strong>
+          </div>
+          <div class="storage-bar"><span id="storageProgress"></span></div>
+          <p>Synced just now</p>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <button class="mobile-menu" id="mobileMenu" aria-label="Open menu">☰</button>
+        <div class="context-title">
+          <span class="status-dot"></span>
+          <span>Knowladge Bank Assistant</span>
+        </div>
+      </header>
+
+      <section class="chat-view active-view" id="chatView">
+        <div class="chat-scroll" id="chatScroll">
+          <div class="welcome" id="welcome">
+            <div class="atlas-orb">
+              <span></span><span></span><span></span>
+            </div>
+            <p class="eyebrow">Your team's knowledge, connected</p>
+            <h1>What do you want to know?</h1>
+            <p class="welcome-copy">Ask anything about your files. Atlas searches the raw source material and shows its work.</p>
+          </div>
+          <div class="conversation" id="conversation"></div>
+        </div>
+
+        <div class="composer-wrap">
+          <form class="composer" id="askForm">
+            <textarea id="questionInput" rows="1" placeholder="Ask a question across your knowledge…" aria-label="Ask a question"></textarea>
+            <div class="composer-bottom">
+              <button type="button" class="add-source" id="uploadFromComposer">
+                <span>＋</span> Add source
+              </button>
+              <div class="composer-hint">Answers include citations</div>
+              <button class="send-button" id="sendButton" type="submit" aria-label="Send question">↑</button>
+            </div>
+          </form>
+          <p class="disclaimer">Atlas answers from your connected sources. Verify important details.</p>
+        </div>
+      </section>
+
+      <section class="library-view" id="libraryView">
+        <div class="library-header">
+          <div>
+            <p class="eyebrow">Connected knowledge</p>
+            <h1>Knowledge library</h1>
+            <p>Manage the raw data Atlas can use to answer questions.</p>
+          </div>
+          <div class="library-actions">
+            <button class="secondary-button" id="connectDriveButton"><span class="google-drive-mark">▲</span> Connect Google Drive</button>
+            <button class="primary-button" id="uploadButton">＋ Upload Excel or documents</button>
+          </div>
+        </div>
+        <div class="connections" id="connections">
+          <div class="connection-empty">
+            <span class="google-drive-mark large">▲</span>
+            <span><strong>Bring in a Google Drive folder</strong><small>Atlas will index supported files and keep the folder in sync.</small></span>
+            <button id="emptyConnectDrive">Connect folder</button>
+          </div>
+        </div>
+        <div class="library-toolbar">
+          <div class="search-field"><span>⌕</span><input id="librarySearch" placeholder="Search sources"></div>
+          <button class="filter-button">All files <span>⌄</span></button>
+          <div class="sync-state"><span class="status-dot"></span> All sources indexed</div>
+        </div>
+        <div class="file-table">
+          <div class="file-row file-head">
+            <span>Name</span><span>Type</span><span>Last synced</span><span></span>
+          </div>
+          <div id="fileList"></div>
+        </div>
+      </section>
+    </main>
+
+    <aside class="source-drawer" id="sourceDrawer" aria-hidden="true">
+      <div class="drawer-header">
+        <div><p class="eyebrow">Answer evidence</p><h2>Sources</h2></div>
+        <button id="closeDrawer" aria-label="Close sources">×</button>
+      </div>
+      <div class="drawer-body" id="drawerBody">
+        <div class="empty-drawer">
+          <span>⌕</span>
+          <h3>No answer selected</h3>
+          <p>Ask a question to see the source passages used in the answer.</p>
+        </div>
+      </div>
+    </aside>
+    <div class="modal-wrap" id="driveModal" aria-hidden="true">
+      <div class="drive-modal" role="dialog" aria-modal="true" aria-labelledby="driveModalTitle">
+        <div class="modal-top">
+          <div class="google-drive-logo"><span></span><span></span><span></span></div>
+          <button id="closeDriveModal" aria-label="Close Google Drive connection">×</button>
+        </div>
+        <div class="drive-step active" id="driveAuthStep">
+          <p class="eyebrow">Knowledge connection</p>
+          <h2 id="driveModalTitle">Connect Google Drive</h2>
+          <p>Choose a folder to give Atlas access to. Only files inside the folder you select will be indexed.</p>
+          <div class="permission-list">
+            <span>✓ Read files in the selected folder</span>
+            <span>✓ Keep answers current when files change</span>
+            <span>✓ Disconnect access at any time</span>
+          </div>
+          <button class="google-auth-button" id="authorizeDrive"><span class="google-g">G</span> Continue with Google</button>
+          <small class="modal-note">Prototype authorization. No Google account data is transmitted.</small>
+        </div>
+        <div class="drive-step" id="folderStep">
+          <p class="eyebrow">Google Drive</p>
+          <h2>Select a folder</h2>
+          <p>Atlas will index supported documents from this folder.</p>
+          <label class="folder-url-label" for="folderUrl">Or paste a shared folder link</label>
+          <div class="folder-url-row"><input id="folderUrl" placeholder="https://drive.google.com/drive/folders/…"><button id="useFolderUrl">Add</button></div>
+          <div class="folder-divider"><span>Recent folders</span></div>
+          <div class="folder-list">
+            <button class="folder-option" data-folder="Product & Strategy"><span class="folder-icon">▰</span><span><strong>Product & Strategy</strong><small>12 files · Updated today</small></span><span>›</span></button>
+            <button class="folder-option" data-folder="Company Handbook"><span class="folder-icon">▰</span><span><strong>Company Handbook</strong><small>8 files · Updated yesterday</small></span><span>›</span></button>
+            <button class="folder-option" data-folder="Customer Research"><span class="folder-icon">▰</span><span><strong>Customer Research</strong><small>24 files · Updated Jun 2</small></span><span>›</span></button>
+          </div>
+          <button class="back-button" id="backToAuth">← Back</button>
+        </div>
+        <div class="drive-step sync-step" id="syncStep">
+          <div class="sync-orb"><span>▲</span></div>
+          <h2>Connecting folder…</h2>
+          <p id="syncFolderName">Reading files from Google Drive</p>
+          <div class="sync-progress"><span></span></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-wrap" id="lockModal" aria-hidden="true">
+      <form class="security-modal" id="unlockForm" role="dialog" aria-modal="true" aria-labelledby="lockTitle">
+        <button type="button" class="modal-close" id="closeLockModal" aria-label="Close">×</button>
+        <div class="lock-orb">⌑</div>
+        <p class="eyebrow">Restricted access</p>
+        <h2 id="lockTitle">Unlock Knowledge Library</h2>
+        <p>Enter the library password to manage connected sources and files.</p>
+        <label for="libraryPassword">Password</label>
+        <input type="password" id="libraryPassword" autocomplete="current-password" placeholder="Enter password">
+        <span class="password-error" id="passwordError">Incorrect password. Please try again.</span>
+        <button class="unlock-button" type="submit">Unlock library</button>
+      </form>
+    </div>
+    <div class="modal-wrap" id="deleteModal" aria-hidden="true">
+      <div class="security-modal delete-modal" role="dialog" aria-modal="true" aria-labelledby="deleteTitle">
+        <button type="button" class="modal-close" id="closeDeleteModal" aria-label="Close">×</button>
+        <div class="delete-orb">×</div>
+        <p class="eyebrow">Remove source</p>
+        <h2 id="deleteTitle">Delete this file?</h2>
+        <p id="deleteMessage">This file will be removed from the Knowledge Library and Atlas will no longer use it for answers.</p>
+        <div class="delete-actions">
+          <button type="button" id="cancelDelete">Cancel</button>
+          <button type="button" class="danger-button" id="confirmDelete">Delete file</button>
+        </div>
+      </div>
+    </div>
+    <div class="scrim" id="scrim"></div>
+  </div>
+
+  <input type="file" id="fileInput" accept=".xlsx,.xls,.docx,.doc,.pdf" multiple hidden>
+  <div class="toast" id="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>
