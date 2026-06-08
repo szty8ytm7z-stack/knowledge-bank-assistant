@@ -69,7 +69,13 @@ async function ensureLibrary() {
   await fs.mkdir(path.dirname(dataFile), { recursive: true });
   try {
     const raw = await fs.readFile(dataFile, "utf8");
-    return JSON.parse(raw);
+    const state = JSON.parse(raw);
+    if (!Array.isArray(state.documents) || state.documents.length === 0) {
+      const initial = { documents: seedDocuments, connectedFolders: [] };
+      await fs.writeFile(dataFile, JSON.stringify(initial, null, 2));
+      return initial;
+    }
+    return state;
   } catch {
     const initial = { documents: seedDocuments, connectedFolders: [] };
     await fs.writeFile(dataFile, JSON.stringify(initial, null, 2));
