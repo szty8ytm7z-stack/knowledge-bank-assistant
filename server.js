@@ -57,6 +57,9 @@ const seedDocuments = [
   }
 ];
 
+const demoDocumentNames = new Set(seedDocuments.map(document => document.name));
+seedDocuments.length = 0;
+
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -70,10 +73,18 @@ async function ensureLibrary() {
   try {
     const raw = await fs.readFile(dataFile, "utf8");
     const state = JSON.parse(raw);
-    if (!Array.isArray(state.documents) || state.documents.length === 0) {
+    if (!Array.isArray(state.documents)) {
       const initial = { documents: seedDocuments, connectedFolders: [] };
       await fs.writeFile(dataFile, JSON.stringify(initial, null, 2));
       return initial;
+    }
+    const filtered = {
+      documents: state.documents.filter(document => !demoDocumentNames.has(document.name)),
+      connectedFolders: Array.isArray(state.connectedFolders) ? state.connectedFolders : []
+    };
+    if (filtered.documents.length !== state.documents.length) {
+      await fs.writeFile(dataFile, JSON.stringify(filtered, null, 2));
+      return filtered;
     }
     return state;
   } catch {

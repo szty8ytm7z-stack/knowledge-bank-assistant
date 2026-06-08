@@ -33,8 +33,11 @@ const seedDocuments = [
   }
 ];
 
+const demoDocumentNames = new Set(seedDocuments.map(document => document.name));
+seedDocuments.length = 0;
+
 const savedLibrary = loadLibraryState();
-let documents = savedLibrary?.documents || [...seedDocuments];
+let documents = (savedLibrary?.documents || [...seedDocuments]).filter(document => !demoDocumentNames.has(document.name));
 let activeSources = [];
 let connectedFolders = savedLibrary?.connectedFolders || [];
 let latestUploadedDocument = documents.find(doc => doc.isUpload) || null;
@@ -90,7 +93,7 @@ async function loadSharedLibraryState() {
     if (!response.ok) throw new Error("Shared library unavailable");
     const state = await response.json();
     if (!Array.isArray(state.documents) || !Array.isArray(state.connectedFolders)) return;
-    documents = state.documents;
+    documents = state.documents.filter(document => !demoDocumentNames.has(document.name));
     connectedFolders = state.connectedFolders;
     latestUploadedDocument = documents.find(doc => doc.isUpload) || documents[0] || null;
     sharedLibraryAvailable = true;
