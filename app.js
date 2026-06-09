@@ -45,6 +45,7 @@ let libraryUnlocked = false;
 let pendingDeleteIndex = null;
 let recentQuestions = loadRecentQuestions();
 let sharedLibraryAvailable = false;
+let pdfJsModulePromise = null;
 
 const driveFolderDocuments = {
   "Product & Strategy": [
@@ -493,7 +494,7 @@ async function extractDocumentText(file, extension) {
     const buffer = await file.arrayBuffer();
     if (extension === "docx") return extractDocxText(buffer);
     if (extension === "xlsx") return extractXlsxText(buffer);
-    if (extension === "pdf") return extractPdfText(buffer);
+    if (extension === "pdf") return extractPdfTextWithOcr(buffer, file.name);
     return extractReadableStrings(buffer);
   } catch (error) {
     console.warn("Document extraction failed", error);
@@ -573,6 +574,72 @@ function extractPdfText(buffer) {
     match[1].replace(/\\([()\\])/g, "$1").replace(/\\n/g, " ")
   );
   return pieces.join(" ").replace(/\s+/g, " ").trim() || extractReadableStrings(buffer);
+}
+
+async function extractPdfTextWithOcr(buffer, fileName) {
+  const directText = extractPdfText(buffer);
+  if (directText.length > 180) return directText;
+
+  const ocrText = await ocrPdfPages(buffer, fileName);
+  return ocrText || directText;
+}
+
+async function ocrPdfPages(buffer, fileName) {
+  const pdfjsLib = await loadPdfJs();
+  if (!pdfjsLib || !window.Tesseract) {
+    showToast("OCR tools are loading. Try uploading again in a moment.");
+    return "";
+  }
+
+  try {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs";
+    const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+    const pageLimit = Math.min(pdf.numPages, 8);
+    const pageTexts = [];
+
+    for (let pageNumber = 1; pageNumber <= pageLimit; pageNumber++) {
+      showToast(`OCR reading ${fileName} · page ${pageNumber}/${pageLimit}`);
+      const page = await pdf.getPage(pageNumber);
+      const viewport = page.getViewport({ scale: 1.6 });
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d");
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      await page.render({ canvasContext: context, viewport }).promise;
+
+      const result = await window.Tesseract.recognize(canvas, "eng", {
+        logger: event => {
+          if (event.status === "recognizing text") {
+            const percent = Math.round((event.progress || 0) * 100);
+            if (percent && percent % 25 === 0) showToast(`OCR page ${pageNumber}: ${percent}%`);
+          }
+        }
+      });
+      const text = result?.data?.text?.replace(/\s+/g, " ").trim();
+      if (text) pageTexts.push(`Page ${pageNumber}: ${text}`);
+    }
+
+    if (pdf.numPages > pageLimit) {
+      pageTexts.push(`OCR note: only the first ${pageLimit} pages were scanned to keep upload time manageable.`);
+    }
+
+    return pageTexts.join(". ");
+  } catch (error) {
+    console.warn("OCR failed", error);
+    showToast("OCR could not read this PDF");
+    return "";
+  }
+}
+
+async function loadPdfJs() {
+  if (!pdfJsModulePromise) {
+    pdfJsModulePromise = import("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs")
+      .catch(error => {
+        console.warn("PDF.js failed to load", error);
+        return null;
+      });
+  }
+  return pdfJsModulePromise;
 }
 
 function extractReadableStrings(buffer) {

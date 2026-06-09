@@ -7,6 +7,7 @@ A browser-based AI chatbot prototype for searching and analyzing uploaded knowle
 - Chat interface for asking questions across indexed knowledge
 - Knowledge Library with password-restricted access
 - Upload support for Excel, Word, and PDF documents
+- OCR support for scanned/image-based PDF reports
 - Google Drive folder connection prototype
 - Source-grounded answers with citations
 - Full report breakdowns with simplified summaries
