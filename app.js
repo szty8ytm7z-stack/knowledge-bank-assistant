@@ -699,7 +699,7 @@ async function ocrPdfPages(buffer, fileName) {
   try {
     pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs";
     const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
-    const pageLimit = Math.min(pdf.numPages, 8);
+    const pageLimit = pdf.numPages;
     const pageTexts = [];
 
     for (let pageNumber = 1; pageNumber <= pageLimit; pageNumber++) {
@@ -722,10 +722,6 @@ async function ocrPdfPages(buffer, fileName) {
       });
       const text = result?.data?.text?.replace(/\s+/g, " ").trim();
       if (text) pageTexts.push(`Page ${pageNumber}: ${text}`);
-    }
-
-    if (pdf.numPages > pageLimit) {
-      pageTexts.push(`OCR note: only the first ${pageLimit} pages were scanned to keep upload time manageable.`);
     }
 
     return pageTexts.join(". ");
