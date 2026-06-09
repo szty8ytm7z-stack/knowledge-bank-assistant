@@ -293,14 +293,17 @@ button { color: inherit; cursor: pointer; }
 .filter-button { border: 1px solid var(--line); background: white; height: 34px; border-radius: 8px; font-size: 10px; padding: 0 10px; }
 .sync-state { margin-left: auto; color: #77746e; font-size: 9px; display: flex; gap: 7px; align-items: center; }
 .file-table { max-width: 1050px; margin: auto; border: 1px solid var(--line); background: white; border-radius: 11px; overflow: hidden; }
-.file-row { display: grid; grid-template-columns: minmax(220px, 1fr) 120px 130px 30px; align-items: center; min-height: 57px; padding: 0 16px; border-top: 1px solid #f0eee9; font-size: 10px; color: #77746e; }
+.file-row { display: grid; grid-template-columns: minmax(220px, 1fr) 120px 130px 66px; align-items: center; min-height: 57px; padding: 0 16px; border-top: 1px solid #f0eee9; font-size: 10px; color: #77746e; }
 .file-head { min-height: 35px; border: 0; background: #f8f7f3; color: #a19d96; text-transform: uppercase; letter-spacing: .08em; font-size: 8px; font-weight: 700; }
 .file-name { display: flex; gap: 10px; align-items: center; color: var(--ink); font-weight: 600; }
 .file-icon { width: 29px; height: 32px; background: #ece8df; border-radius: 4px 7px 7px 4px; display: grid; place-items: center; color: #77716a; font-size: 9px; }
 .file-row button { border: 0; background: transparent; color: #aaa69f; }
-.file-row .delete-file { width: 27px; height: 27px; border-radius: 6px; font-size: 14px; }
+.file-actions { display: flex; justify-content: flex-end; gap: 4px; }
+.file-row .delete-file, .file-row .download-file { width: 27px; height: 27px; border-radius: 6px; font-size: 14px; }
+.file-row .download-file:hover, .inline-download:hover { background: #f0e8da; color: var(--ink); }
 .file-row .delete-file:hover { background: #faece8; color: #c55338; }
 .file-row mark { background: #fce4da; color: inherit; padding: 0; }
+.inline-download { border: 1px solid var(--line); background: white; border-radius: 7px; padding: 5px 9px; margin-left: 8px; font-size: 9px; font-weight: 700; color: #77746e; }
 
 .source-drawer { position: fixed; z-index: 60; right: 0; top: 0; bottom: 0; width: min(420px, 92vw); background: #fdfcf9; box-shadow: -20px 0 60px rgba(30, 28, 24, .13); transform: translateX(102%); transition: transform .25s ease; }
 .source-drawer.open { transform: none; }

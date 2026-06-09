@@ -107,6 +107,10 @@ function sendJson(response, status, data) {
 
 async function handleApi(request, response) {
   const url = new URL(request.url, "http://localhost");
+  if (url.pathname.startsWith("/api/library/download/")) {
+    return downloadLibraryDocument(url, response);
+  }
+
   if (url.pathname !== "/api/library") {
     return sendJson(response, 404, { error: "Not found" });
   }
@@ -126,6 +130,8 @@ async function handleApi(request, response) {
         type: String(document.type || "Document"),
         synced: String(document.synced || "Just now"),
         content: String(document.content || ""),
+        fileData: isValidDataUrl(document.fileData) ? String(document.fileData) : undefined,
+        mimeType: document.mimeType ? String(document.mimeType) : undefined,
         driveFolder: document.driveFolder ? String(document.driveFolder) : undefined,
         isUpload: Boolean(document.isUpload)
       })),
@@ -139,6 +145,28 @@ async function handleApi(request, response) {
   return sendJson(response, 405, { error: "Method not allowed" });
 }
 
+async function downloadLibraryDocument(url, response) {
+  const index = Number(url.pathname.split("/").pop());
+  const state = await ensureLibrary();
+  const document = Number.isInteger(index) ? state.documents[index] : null;
+  if (!document) return sendJson(response, 404, { error: "Document not found" });
+
+  const storedFile = parseDataUrl(document.fileData);
+  if (storedFile) {
+    response.writeHead(200, {
+      "Content-Type": document.mimeType || storedFile.mimeType || "application/octet-stream",
+      "Content-Disposition": contentDisposition(document.name)
+    });
+    return response.end(storedFile.buffer);
+  }
+
+  response.writeHead(200, {
+    "Content-Type": "text/plain; charset=utf-8",
+    "Content-Disposition": contentDisposition(textExportName(document.name))
+  });
+  response.end(document.content || "");
+}
+
 function sanitizeStoredDocument(document) {
   const isPdf = document.type === "PDF document" || document.name.toLowerCase().endsWith(".pdf");
   if (isPdf && document.content && !isReadableText(document.content)) {
@@ -148,6 +176,29 @@ function sanitizeStoredDocument(document) {
     };
   }
   return document;
+}
+
+function isValidDataUrl(value) {
+  return typeof value === "string" && /^data:[^,]+;base64,/i.test(value);
+}
+
+function parseDataUrl(value) {
+  if (!isValidDataUrl(value)) return null;
+  const match = value.match(/^data:([^,;]+)?;base64,(.+)$/i);
+  if (!match) return null;
+  return {
+    mimeType: match[1],
+    buffer: Buffer.from(match[2], "base64")
+  };
+}
+
+function contentDisposition(filename) {
+  const fallback = filename.replace(/[^\w.\- ]+/g, "_").slice(0, 120) || "document.txt";
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
+}
+
+function textExportName(filename) {
+  return filename.toLowerCase().endsWith(".txt") ? filename : `${filename}.txt`;
 }
 
 function isReadableText(text) {

@@ -171,10 +171,14 @@ function getQuestionProfile(question) {
 
 function searchDocuments(question) {
   const refersToCurrentDocument = /\b(this|the|uploaded|latest)\s+(report|document|file|spreadsheet|workbook)\b/i.test(question);
-  if (refersToCurrentDocument) return [{ ...(latestUploadedDocument || documents[0]), score: 10 }];
+  if (refersToCurrentDocument) {
+    const document = latestUploadedDocument || documents[0];
+    const libraryIndex = documents.findIndex(doc => doc === document || doc.name === document?.name);
+    return document ? [{ ...document, libraryIndex, score: 10 }] : [];
+  }
   const profile = getQuestionProfile(question);
   const terms = profile.terms;
-  return documents.filter(doc => isReadableText(doc.content)).map(doc => {
+  return documents.map((doc, libraryIndex) => ({ ...doc, libraryIndex })).filter(doc => isReadableText(doc.content)).map(doc => {
     const words = tokenize(`${doc.name} ${doc.content}`);
     const titleWords = tokenize(doc.name);
     const titleScore = terms.reduce((sum, term) => sum + titleWords.filter(word => word === term).length * 4, 0);
@@ -218,11 +222,22 @@ function buildAnswer(question, sources) {
     return `<p>I couldn't find a grounded answer in the connected sources. Try using a more specific term, or add a source containing the information you need.</p>`;
   }
 
+  const wantsDownload = /\b(download|save|get|export)\b/i.test(question) && /\b(file|document|report|spreadsheet|workbook|pdf|docx?|xlsx?)\b/i.test(question);
+  if (wantsDownload) return buildDownloadAnswer(sources);
+
   const wantsBreakdown = /\b(breakdown|break down|summari[sz]e|analyse|analyze|simplif|overview)\b/i.test(question)
     || (/\b(what does|what is|explain|about)\b/i.test(question) && /\b(report|document|file|spreadsheet|workbook|this|it)\b/i.test(question));
   if (wantsBreakdown && sources.length) return buildDocumentBreakdown(sources[0]);
 
   return buildAnalyticalAnswer(question, sources);
+}
+
+function buildDownloadAnswer(sources) {
+  const links = sources.slice(0, 3).map(source => {
+    const index = Number.isInteger(source.libraryIndex) ? source.libraryIndex : documents.findIndex(doc => doc.name === source.name);
+    return `<li>${escapeHtml(source.name)} <button class="inline-download" data-index="${index}">Download</button></li>`;
+  }).join("");
+  return `<p>I found the closest matching document${sources.length > 1 ? "s" : ""}. Choose the one you want to download:</p><ul>${links}</ul>`;
 }
 
 function sanitizeStoredDocument(document) {
@@ -367,6 +382,7 @@ function ask(question) {
 
 function bindDynamicActions() {
   $$(".citation").forEach(button => button.onclick = () => openDrawer(Number(button.dataset.source)));
+  $$(".inline-download").forEach(button => button.onclick = () => downloadDocument(Number(button.dataset.index)));
   $$(".copy-answer").forEach(button => button.onclick = () => {
     const text = button.closest(".answer-message").querySelector(".answer-body").innerText;
     navigator.clipboard?.writeText(text);
@@ -413,8 +429,9 @@ function renderFiles(filter = "") {
   $("#fileList").innerHTML = shown.map(doc => `
     <div class="file-row">
       <span class="file-name"><span class="file-icon">${doc.type.slice(0, 3).toUpperCase()}</span>${highlight(doc.name, filter)}</span>
-      <span>${doc.type}</span><span>${doc.synced}</span><button class="delete-file" data-index="${documents.indexOf(doc)}" title="Delete ${escapeHtml(doc.name)}" aria-label="Delete ${escapeHtml(doc.name)}">×</button>
+      <span>${doc.type}</span><span>${doc.synced}</span><span class="file-actions"><button class="download-file" data-index="${documents.indexOf(doc)}" title="Download ${escapeHtml(doc.name)}" aria-label="Download ${escapeHtml(doc.name)}">↓</button><button class="delete-file" data-index="${documents.indexOf(doc)}" title="Delete ${escapeHtml(doc.name)}" aria-label="Delete ${escapeHtml(doc.name)}">×</button></span>
     </div>`).join("");
+  $$(".download-file").forEach(button => button.onclick = () => downloadDocument(Number(button.dataset.index)));
   $$(".delete-file").forEach(button => button.onclick = () => openDeleteModal(Number(button.dataset.index)));
   updateCounts();
 }
@@ -580,6 +597,40 @@ function showToast(message) {
   window.setTimeout(() => $("#toast").classList.remove("show"), 1800);
 }
 
+function downloadDocument(index) {
+  const libraryDocument = documents[index];
+  if (!libraryDocument) return;
+
+  if (libraryDocument.fileData) {
+    triggerDownload(libraryDocument.fileData, libraryDocument.name);
+    return;
+  }
+
+  if (sharedLibraryAvailable || isDeployedSharedApp()) {
+    triggerDownload(`/api/library/download/${index}`, textExportName(libraryDocument.name));
+    return;
+  }
+
+  const blob = new Blob([libraryDocument.content || ""], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  triggerDownload(url, textExportName(libraryDocument.name));
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function triggerDownload(url, filename) {
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  showToast(`Downloading ${filename}`);
+}
+
+function textExportName(filename) {
+  return filename.toLowerCase().endsWith(".txt") ? filename : `${filename}.txt`;
+}
+
 async function ingestFiles(files) {
   const allowed = ["xlsx", "xls", "docx", "doc", "pdf"];
   const typeNames = {
@@ -602,6 +653,8 @@ async function ingestFiles(files) {
       type: typeNames[extension],
       synced: "Just now",
       isUpload: true,
+      mimeType: file.type,
+      fileData: await readFileAsDataUrl(file),
       content: extracted || `${file.name} was uploaded, but its text could not be extracted in this browser. Try a modern DOCX, XLSX, or text-based PDF.`
     };
     documents.unshift(document);
@@ -615,6 +668,15 @@ async function ingestFiles(files) {
   } else {
     showToast("Only Excel, Word, and PDF documents are supported");
   }
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
 }
 
 async function extractDocumentText(file, extension) {
