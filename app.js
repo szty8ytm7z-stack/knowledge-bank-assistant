@@ -37,7 +37,9 @@ const demoDocumentNames = new Set(seedDocuments.map(document => document.name));
 seedDocuments.length = 0;
 
 const savedLibrary = loadLibraryState();
-let documents = (savedLibrary?.documents || [...seedDocuments]).filter(document => !demoDocumentNames.has(document.name));
+let documents = (savedLibrary?.documents || [...seedDocuments])
+  .filter(document => !demoDocumentNames.has(document.name))
+  .map(sanitizeStoredDocument);
 let activeSources = [];
 let connectedFolders = savedLibrary?.connectedFolders || [];
 let latestUploadedDocument = documents.find(doc => doc.isUpload) || null;
@@ -71,6 +73,7 @@ function loadLibraryState() {
 }
 
 function saveLibraryState() {
+  documents = documents.map(sanitizeStoredDocument);
   const state = { documents, connectedFolders };
   try {
     localStorage.setItem("atlas-library-state", JSON.stringify(state));
@@ -94,7 +97,9 @@ async function loadSharedLibraryState() {
     if (!response.ok) throw new Error("Shared library unavailable");
     const state = await response.json();
     if (!Array.isArray(state.documents) || !Array.isArray(state.connectedFolders)) return;
-    documents = state.documents.filter(document => !demoDocumentNames.has(document.name));
+    documents = state.documents
+      .filter(document => !demoDocumentNames.has(document.name))
+      .map(sanitizeStoredDocument);
     connectedFolders = state.connectedFolders;
     latestUploadedDocument = documents.find(doc => doc.isUpload) || documents[0] || null;
     sharedLibraryAvailable = true;
@@ -162,7 +167,7 @@ function searchDocuments(question) {
   if (refersToCurrentDocument) return [{ ...(latestUploadedDocument || documents[0]), score: 10 }];
   const profile = getQuestionProfile(question);
   const terms = profile.terms;
-  return documents.map(doc => {
+  return documents.filter(doc => isReadableText(doc.content)).map(doc => {
     const words = tokenize(`${doc.name} ${doc.content}`);
     const titleWords = tokenize(doc.name);
     const titleScore = terms.reduce((sum, term) => sum + titleWords.filter(word => word === term).length * 4, 0);
@@ -211,6 +216,16 @@ function buildAnswer(question, sources) {
   if (wantsBreakdown && sources.length) return buildDocumentBreakdown(sources[0]);
 
   return buildAnalyticalAnswer(question, sources);
+}
+
+function sanitizeStoredDocument(document) {
+  if (document.type === "PDF document" && document.content && !isReadableText(document.content)) {
+    return {
+      ...document,
+      content: `${document.name} needs to be re-uploaded. The previous PDF text extraction saved compressed PDF data instead of readable document text. Upload it again so Atlas can use OCR to scan the full document.`
+    };
+  }
+  return document;
 }
 
 function buildAnalyticalAnswer(question, sources) {
@@ -359,7 +374,7 @@ function renderDrawer(sources) {
   $("#drawerBody").innerHTML = sources.map((source, index) => `
     <article class="source-card" data-card="${index}">
       <div class="source-card-top"><span class="source-number">${index + 1}</span><span><strong>${escapeHtml(source.name)}</strong><small>${source.type} · Relevance ${Math.min(99, 70 + source.score * 3)}%</small></span></div>
-      <p>${escapeHtml(source.content)}</p>
+      <p>${escapeHtml(isReadableText(source.content) ? source.content : `${source.name} needs to be re-uploaded so OCR can extract readable text.`)}</p>
     </article>`).join("");
 }
 
@@ -600,7 +615,8 @@ async function extractDocumentText(file, extension) {
     if (extension === "docx") return extractDocxText(buffer);
     if (extension === "xlsx") return extractXlsxText(buffer);
     if (extension === "pdf") return extractPdfTextWithOcr(buffer, file.name);
-    return extractReadableStrings(buffer);
+    const text = extractReadableStrings(buffer);
+    return isReadableText(text) ? text : "";
   } catch (error) {
     console.warn("Document extraction failed", error);
     return "";
@@ -678,15 +694,40 @@ function extractPdfText(buffer) {
   const pieces = [...raw.matchAll(/\(([^()]*(?:\\.[^()]*)*)\)\s*(?:Tj|'|")/g)].map(match =>
     match[1].replace(/\\([()\\])/g, "$1").replace(/\\n/g, " ")
   );
-  return pieces.join(" ").replace(/\s+/g, " ").trim() || extractReadableStrings(buffer);
+  const text = pieces.join(" ").replace(/\s+/g, " ").trim();
+  return isReadableText(text) ? text : "";
 }
 
 async function extractPdfTextWithOcr(buffer, fileName) {
+  const pdfText = await extractPdfTextWithPdfJs(buffer);
+  if (pdfText.length > 180) return pdfText;
+
   const directText = extractPdfText(buffer);
   if (directText.length > 180) return directText;
 
   const ocrText = await ocrPdfPages(buffer, fileName);
-  return ocrText || directText;
+  return isReadableText(ocrText) ? ocrText : "";
+}
+
+async function extractPdfTextWithPdfJs(buffer) {
+  const pdfjsLib = await loadPdfJs();
+  if (!pdfjsLib) return "";
+  try {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs";
+    const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+    const pages = [];
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+      const page = await pdf.getPage(pageNumber);
+      const content = await page.getTextContent();
+      const text = content.items.map(item => item.str).join(" ").replace(/\s+/g, " ").trim();
+      if (text) pages.push(`Page ${pageNumber}: ${text}`);
+    }
+    const joined = pages.join(". ");
+    return isReadableText(joined) ? joined : "";
+  } catch (error) {
+    console.warn("PDF text extraction failed", error);
+    return "";
+  }
 }
 
 async function ocrPdfPages(buffer, fileName) {
@@ -745,6 +786,15 @@ async function loadPdfJs() {
 
 function extractReadableStrings(buffer) {
   return new TextDecoder("latin1").decode(buffer).match(/[A-Za-z][A-Za-z0-9 ,.;:$%()'"/-]{20,}/g)?.join(" ") || "";
+}
+
+function isReadableText(text) {
+  if (!text || text.trim().length < 20) return false;
+  const cleaned = text.replace(/\s+/g, " ").trim();
+  const printable = (cleaned.match(/[A-Za-z0-9 .,;:!?'"()/$%&+\-\n]/g) || []).length;
+  const letters = (cleaned.match(/[A-Za-z]/g) || []).length;
+  const suspicious = (cleaned.match(/[^\x09\x0A\x0D\x20-\x7E£€–—‘’“”]/g) || []).length;
+  return printable / cleaned.length > 0.82 && letters / cleaned.length > 0.18 && suspicious / cleaned.length < 0.04;
 }
 
 $("#askForm").addEventListener("submit", event => { event.preventDefault(); ask(questionInput.value); });

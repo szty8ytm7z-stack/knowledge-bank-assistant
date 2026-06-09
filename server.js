@@ -79,10 +79,10 @@ async function ensureLibrary() {
       return initial;
     }
     const filtered = {
-      documents: state.documents.filter(document => !demoDocumentNames.has(document.name)),
+      documents: state.documents.filter(document => !demoDocumentNames.has(document.name)).map(sanitizeStoredDocument),
       connectedFolders: Array.isArray(state.connectedFolders) ? state.connectedFolders : []
     };
-    if (filtered.documents.length !== state.documents.length) {
+    if (JSON.stringify(filtered) !== JSON.stringify(state)) {
       await fs.writeFile(dataFile, JSON.stringify(filtered, null, 2));
       return filtered;
     }
@@ -120,7 +120,7 @@ async function handleApi(request, response) {
       return sendJson(response, 400, { error: "Invalid library state" });
     }
     const state = {
-      documents: body.documents.map(document => ({
+      documents: body.documents.map(document => sanitizeStoredDocument({
         name: String(document.name || "Untitled"),
         type: String(document.type || "Document"),
         synced: String(document.synced || "Just now"),
@@ -136,6 +136,25 @@ async function handleApi(request, response) {
   }
 
   return sendJson(response, 405, { error: "Method not allowed" });
+}
+
+function sanitizeStoredDocument(document) {
+  if (document.type === "PDF document" && document.content && !isReadableText(document.content)) {
+    return {
+      ...document,
+      content: `${document.name} needs to be re-uploaded. The previous PDF text extraction saved compressed PDF data instead of readable document text. Upload it again so Atlas can use OCR to scan the full document.`
+    };
+  }
+  return document;
+}
+
+function isReadableText(text) {
+  if (!text || text.trim().length < 20) return false;
+  const cleaned = text.replace(/\s+/g, " ").trim();
+  const printable = (cleaned.match(/[A-Za-z0-9 .,;:!?'"()/$%&+\-\n]/g) || []).length;
+  const letters = (cleaned.match(/[A-Za-z]/g) || []).length;
+  const suspicious = (cleaned.match(/[^\x09\x0A\x0D\x20-\x7E£€–—‘’“”]/g) || []).length;
+  return printable / cleaned.length > 0.82 && letters / cleaned.length > 0.18 && suspicious / cleaned.length < 0.04;
 }
 
 async function handleStatic(request, response) {
