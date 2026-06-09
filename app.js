@@ -37,7 +37,7 @@ const demoDocumentNames = new Set(seedDocuments.map(document => document.name));
 seedDocuments.length = 0;
 
 const savedLibrary = loadLibraryState();
-let documents = (savedLibrary?.documents || [...seedDocuments])
+let documents = isDeployedSharedApp() ? [...seedDocuments] : (savedLibrary?.documents || [...seedDocuments])
   .filter(document => !demoDocumentNames.has(document.name))
   .map(sanitizeStoredDocument);
 let activeSources = [];
@@ -91,6 +91,10 @@ function saveLibraryState() {
   });
 }
 
+function isDeployedSharedApp() {
+  return location.hostname.includes("onrender.com");
+}
+
 async function loadSharedLibraryState() {
   try {
     const response = await fetch("/api/library");
@@ -108,6 +112,9 @@ async function loadSharedLibraryState() {
     renderConnections();
   } catch {
     sharedLibraryAvailable = false;
+    documents = documents.map(sanitizeStoredDocument);
+    renderFiles($("#librarySearch").value);
+    renderConnections();
   }
 }
 
@@ -219,7 +226,8 @@ function buildAnswer(question, sources) {
 }
 
 function sanitizeStoredDocument(document) {
-  if (document.type === "PDF document" && document.content && !isReadableText(document.content)) {
+  const isPdf = document.type === "PDF document" || document.name.toLowerCase().endsWith(".pdf");
+  if (isPdf && document.content && !isReadableText(document.content)) {
     return {
       ...document,
       content: `${document.name} needs to be re-uploaded. The previous PDF text extraction saved compressed PDF data instead of readable document text. Upload it again so Atlas can use OCR to scan the full document.`
@@ -794,7 +802,8 @@ function isReadableText(text) {
   const printable = (cleaned.match(/[A-Za-z0-9 .,;:!?'"()/$%&+\-\n]/g) || []).length;
   const letters = (cleaned.match(/[A-Za-z]/g) || []).length;
   const suspicious = (cleaned.match(/[^\x09\x0A\x0D\x20-\x7E£€–—‘’“”]/g) || []).length;
-  return printable / cleaned.length > 0.82 && letters / cleaned.length > 0.18 && suspicious / cleaned.length < 0.04;
+  const controls = (cleaned.match(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g) || []).length;
+  return printable / cleaned.length > 0.82 && letters / cleaned.length > 0.18 && (suspicious + controls) / cleaned.length < 0.04;
 }
 
 $("#askForm").addEventListener("submit", event => { event.preventDefault(); ask(questionInput.value); });

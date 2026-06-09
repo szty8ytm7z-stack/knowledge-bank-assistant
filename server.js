@@ -106,7 +106,8 @@ function sendJson(response, status, data) {
 }
 
 async function handleApi(request, response) {
-  if (request.url !== "/api/library") {
+  const url = new URL(request.url, "http://localhost");
+  if (url.pathname !== "/api/library") {
     return sendJson(response, 404, { error: "Not found" });
   }
 
@@ -139,7 +140,8 @@ async function handleApi(request, response) {
 }
 
 function sanitizeStoredDocument(document) {
-  if (document.type === "PDF document" && document.content && !isReadableText(document.content)) {
+  const isPdf = document.type === "PDF document" || document.name.toLowerCase().endsWith(".pdf");
+  if (isPdf && document.content && !isReadableText(document.content)) {
     return {
       ...document,
       content: `${document.name} needs to be re-uploaded. The previous PDF text extraction saved compressed PDF data instead of readable document text. Upload it again so Atlas can use OCR to scan the full document.`
@@ -154,7 +156,8 @@ function isReadableText(text) {
   const printable = (cleaned.match(/[A-Za-z0-9 .,;:!?'"()/$%&+\-\n]/g) || []).length;
   const letters = (cleaned.match(/[A-Za-z]/g) || []).length;
   const suspicious = (cleaned.match(/[^\x09\x0A\x0D\x20-\x7E£€–—‘’“”]/g) || []).length;
-  return printable / cleaned.length > 0.82 && letters / cleaned.length > 0.18 && suspicious / cleaned.length < 0.04;
+  const controls = (cleaned.match(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g) || []).length;
+  return printable / cleaned.length > 0.82 && letters / cleaned.length > 0.18 && (suspicious + controls) / cleaned.length < 0.04;
 }
 
 async function handleStatic(request, response) {
@@ -179,7 +182,8 @@ async function handleStatic(request, response) {
 
 const server = http.createServer(async (request, response) => {
   try {
-    if (request.url.startsWith("/api/")) return await handleApi(request, response);
+    const url = new URL(request.url, "http://localhost");
+    if (url.pathname.startsWith("/api/")) return await handleApi(request, response);
     return await handleStatic(request, response);
   } catch (error) {
     console.error(error);
