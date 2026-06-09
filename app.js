@@ -135,19 +135,70 @@ function tokenize(text) {
   return (text.toLowerCase().match(/[a-z0-9]+/g) || []).filter(word => word.length > 2 && !stop.has(word));
 }
 
+function getQuestionProfile(question) {
+  const lower = question.toLowerCase();
+  const intents = [
+    { type: "summary", pattern: /\b(summary|summarize|summarise|overview|about|say|meaning|main point|breakdown|break down|analyse|analyze|explain)\b/, terms: ["summary", "overview", "purpose", "main", "key", "finding", "conclusion", "recommendation"] },
+    { type: "risk", pattern: /\b(risk|issue|problem|challenge|concern|warning|weakness|threat|danger|blocker)\b/, terms: ["risk", "issue", "problem", "challenge", "concern", "warning", "mitigation", "impact"] },
+    { type: "action", pattern: /\b(action|next|recommend|should|todo|task|step|improve|fix|plan)\b/, terms: ["action", "next", "recommendation", "step", "owner", "plan", "priority", "improvement"] },
+    { type: "financial", pattern: /\b(cost|price|budget|revenue|sales|profit|loss|arr|money|fee|financial)\b/, terms: ["cost", "price", "budget", "revenue", "sales", "profit", "loss", "arr", "fee"] },
+    { type: "timeline", pattern: /\b(when|date|deadline|timeline|schedule|milestone|due|month|year|week)\b/, terms: ["date", "deadline", "timeline", "schedule", "milestone", "due", "launch", "start", "end"] },
+    { type: "people", pattern: /\b(who|owner|responsible|person|people|team|department|approver|requestor)\b/, terms: ["owner", "responsible", "person", "team", "department", "approver", "requestor"] },
+    { type: "metrics", pattern: /\b(number|metric|kpi|percentage|percent|measure|target|result|figure|data)\b/, terms: ["metric", "kpi", "percentage", "percent", "measure", "target", "result", "figure", "data"] },
+    { type: "process", pattern: /\b(process|procedure|steps|workflow|how to|guide|requirement|policy|rule)\b/, terms: ["process", "procedure", "step", "workflow", "guide", "requirement", "policy", "rule"] }
+  ];
+  const matched = intents.filter(intent => intent.pattern.test(lower));
+  const profileTerms = new Set(tokenize(question));
+  matched.forEach(intent => intent.terms.forEach(term => profileTerms.add(term)));
+  return {
+    types: matched.map(intent => intent.type),
+    terms: [...profileTerms],
+    isBroad: matched.some(intent => intent.type === "summary") || tokenize(question).length <= 3
+  };
+}
+
 function searchDocuments(question) {
   const refersToCurrentDocument = /\b(this|the|uploaded|latest)\s+(report|document|file|spreadsheet|workbook)\b/i.test(question);
   if (refersToCurrentDocument) return [{ ...(latestUploadedDocument || documents[0]), score: 10 }];
-  const terms = tokenize(question);
+  const profile = getQuestionProfile(question);
+  const terms = profile.terms;
   return documents.map(doc => {
     const words = tokenize(`${doc.name} ${doc.content}`);
-    const score = terms.reduce((sum, term) => sum + words.filter(word => word === term).length, 0);
+    const titleWords = tokenize(doc.name);
+    const titleScore = terms.reduce((sum, term) => sum + titleWords.filter(word => word === term).length * 4, 0);
+    const contentScore = terms.reduce((sum, term) => sum + words.filter(word => word === term).length, 0);
+    const passageScore = splitPassages(doc.content).reduce((best, passage) => Math.max(best, scoreTextAgainstQuestion(passage, profile)), 0);
+    const score = titleScore + contentScore + passageScore;
     return { ...doc, score };
-  }).filter(doc => doc.score > 0).sort((a, b) => b.score - a.score).slice(0, 3);
+  }).filter(doc => doc.score > 0 || profile.isBroad).sort((a, b) => b.score - a.score).slice(0, 5);
 }
 
 function splitSentences(text) {
   return text.match(/[^.!?]+[.!?]+/g) || [text];
+}
+
+function splitPassages(text) {
+  const cleaned = text.replace(/\s+/g, " ").trim();
+  if (!cleaned) return [];
+  const sentences = splitSentences(cleaned).map(sentence => sentence.trim()).filter(Boolean);
+  if (sentences.length <= 2) return sentences;
+  const passages = [];
+  for (let index = 0; index < sentences.length; index += 2) {
+    passages.push(sentences.slice(index, index + 2).join(" "));
+  }
+  return passages;
+}
+
+function scoreTextAgainstQuestion(text, profile) {
+  const words = tokenize(text);
+  const exactMatches = profile.terms.reduce((sum, term) => sum + words.filter(word => word === term).length, 0);
+  const partialMatches = profile.terms.reduce((sum, term) => {
+    if (term.length < 5) return sum;
+    return sum + words.filter(word => word.includes(term) || term.includes(word)).length * 0.35;
+  }, 0);
+  const figureBoost = /\d|[$£€%]/.test(text) && profile.types.includes("metrics") ? 3 : 0;
+  const dateBoost = /\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\d{4}|\d{1,2}:\d{2})\b/i.test(text) && profile.types.includes("timeline") ? 3 : 0;
+  return exactMatches + partialMatches + figureBoost + dateBoost;
 }
 
 function buildAnswer(question, sources) {
@@ -159,25 +210,79 @@ function buildAnswer(question, sources) {
     || (/\b(what does|what is|explain|about)\b/i.test(question) && /\b(report|document|file|spreadsheet|workbook|this|it)\b/i.test(question));
   if (wantsBreakdown && sources.length) return buildDocumentBreakdown(sources[0]);
 
-  const terms = tokenize(question);
-  let candidates = [];
+  return buildAnalyticalAnswer(question, sources);
+}
+
+function buildAnalyticalAnswer(question, sources) {
+  const profile = getQuestionProfile(question);
+  const candidates = [];
   sources.forEach((source, sourceIndex) => {
-    splitSentences(source.content).forEach(sentence => {
-      const lower = sentence.toLowerCase();
-      const score = terms.reduce((sum, term) => sum + (lower.includes(term) ? 1 : 0), 0);
-      candidates.push({ sentence: sentence.trim(), sourceIndex, score });
+    splitPassages(source.content).forEach(passage => {
+      const score = scoreTextAgainstQuestion(passage, profile);
+      if (passage.length > 20) candidates.push({ passage, sourceIndex, score });
     });
   });
-  candidates.sort((a, b) => b.score - a.score);
-  const selected = candidates.filter(item => item.score > 0).slice(0, 4);
-  if (!selected.length) selected.push(...candidates.slice(0, 3));
 
-  const intro = sources.length === 1
-    ? `Based on <strong>${escapeHtml(sources[0].name)}</strong>, here’s what the source says:`
-    : `I found a grounded answer across ${sources.length} relevant sources:`;
-  return `<p>${intro}</p><ul>${selected.map(item =>
-    `<li>${escapeHtml(item.sentence)} <button class="citation" data-source="${item.sourceIndex}">${item.sourceIndex + 1}</button></li>`
-  ).join("")}</ul>`;
+  candidates.sort((a, b) => b.score - a.score || b.passage.length - a.passage.length);
+  let selected = candidates.filter(item => item.score > 0).slice(0, 6);
+  if (!selected.length) selected = candidates.slice(0, 5);
+
+  if (!selected.length) {
+    return `<p>I can see connected documents, but there is not enough readable text in them to answer this question. If this is a scanned report, upload a clearer PDF so OCR can extract the content.</p>`;
+  }
+
+  const strongest = selected[0];
+  const sourceName = sources[strongest.sourceIndex]?.name || "the selected source";
+  const directAnswer = makeDirectAnswer(question, selected, profile);
+  const grouped = selected.reduce((map, item) => {
+    const key = item.sourceIndex;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(item);
+    return map;
+  }, new Map());
+
+  const supportingDetails = [...grouped.entries()].map(([sourceIndex, items]) => {
+    const source = sources[sourceIndex];
+    const bestItems = items.slice(0, 3).map(item =>
+      `<li>${escapeHtml(item.passage)} <button class="citation" data-source="${sourceIndex}">${sourceIndex + 1}</button></li>`
+    ).join("");
+    return `<h3>${escapeHtml(source.name)}</h3><ul>${bestItems}</ul>`;
+  }).join("");
+
+  return `
+    <div class="analysis-banner"><span>✦</span><span><strong>Document-aware answer</strong><small>Analyzed ${sources.length} source${sources.length > 1 ? "s" : ""}</small></span></div>
+    <h3>Direct answer</h3>
+    <p>${directAnswer} <button class="citation" data-source="${strongest.sourceIndex}">${strongest.sourceIndex + 1}</button></p>
+    <h3>Why this is the answer</h3>
+    ${supportingDetails}
+    <div class="simple-version"><h3>Simplified version</h3><p>${escapeHtml(makeSimplifiedAnswer(selected, sourceName))}</p></div>
+  `;
+}
+
+function makeDirectAnswer(question, selected, profile) {
+  const topPassages = selected.slice(0, 3).map(item => item.passage);
+  const joined = topPassages.join(" ");
+  const first = topPassages[0] || "";
+  if (profile.types.includes("risk")) return escapeHtml(`The main risks or concerns appear to be: ${compressText(joined, 360)}`);
+  if (profile.types.includes("action")) return escapeHtml(`The most relevant actions or recommendations are: ${compressText(joined, 360)}`);
+  if (profile.types.includes("financial")) return escapeHtml(`The financial answer is mainly about these figures or terms: ${compressText(joined, 360)}`);
+  if (profile.types.includes("timeline")) return escapeHtml(`The relevant timeline or date information is: ${compressText(joined, 360)}`);
+  if (profile.types.includes("people")) return escapeHtml(`The people, teams, or owners mentioned are: ${compressText(joined, 360)}`);
+  if (profile.types.includes("metrics")) return escapeHtml(`The relevant metrics or data points are: ${compressText(joined, 360)}`);
+  if (profile.types.includes("process")) return escapeHtml(`The relevant process or requirement is: ${compressText(joined, 360)}`);
+  return escapeHtml(compressText(first || joined, 420));
+}
+
+function makeSimplifiedAnswer(selected, sourceName) {
+  const plain = selected.slice(0, 3).map(item => item.passage).join(" ");
+  return `In simple terms, ${sourceName} says: ${compressText(plain, 300)}`;
+}
+
+function compressText(text, maxLength) {
+  const cleaned = text.replace(/\s+/g, " ").trim();
+  if (cleaned.length <= maxLength) return cleaned;
+  const sliced = cleaned.slice(0, maxLength);
+  return `${sliced.slice(0, sliced.lastIndexOf(" ") || maxLength)}...`;
 }
 
 function buildDocumentBreakdown(source) {

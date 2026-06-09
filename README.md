@@ -10,6 +10,7 @@ A browser-based AI chatbot prototype for searching and analyzing uploaded knowle
 - OCR support for scanned/image-based PDF reports
 - Google Drive folder connection prototype
 - Source-grounded answers with citations
+- Document-aware answer synthesis for broad and specific questions
 - Full report breakdowns with simplified summaries
 - Recent question search and cleanup
 - Persistent local browser state for uploads, deleted files, Drive folders, and recent questions
